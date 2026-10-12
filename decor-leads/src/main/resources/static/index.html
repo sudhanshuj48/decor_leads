@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Decor Buyer Finder</title>
+<style>
+ body{font-family:system-ui,sans-serif;margin:0;background:#f6f4f1;color:#222}
+ header{background:#3b2f2f;color:#fff;padding:16px 24px}
+ main{max-width:1100px;margin:auto;padding:20px}
+ .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px #0002}
+ input,textarea{padding:8px;border:1px solid #ccc;border-radius:6px;width:100%;box-sizing:border-box;margin:4px 0}
+ .row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:180px}
+ button{background:#b5651d;color:#fff;border:0;padding:9px 16px;border-radius:6px;cursor:pointer}
+ button.alt{background:#555}
+ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:6px;border-bottom:1px solid #eee}
+ .wrap{overflow-x:auto}#msg{font-size:14px;color:#555;margin-top:8px}
+</style></head><body>
+<header><h2 style="margin:0">Home Decor Buyer Finder (US)</h2></header>
+<main>
+ <div class="card"><h3>1. Find buyers</h3>
+  <div class="row">
+   <input id="kw" placeholder="Keyword (default: home decor store)">
+   <input id="loc" placeholder="City / State, e.g. Austin, TX">
+   <button onclick="search()">Search</button>
+   <button class="alt" onclick="enrich()">Find emails</button>
+  </div><div id="msg"></div></div>
+
+ <div class="card"><h3>2. Leads</h3><div class="wrap"><table>
+  <thead><tr><th><input type="checkbox" onchange="toggleAll(this)"></th><th>Company</th><th>Website</th><th>Email</th><th>Contact</th><th>Source</th><th>Status</th></tr></thead>
+  <tbody id="rows"></tbody></table></div></div>
+
+ <div class="card"><h3>3. Send email to selected</h3>
+  <input id="subj" placeholder="Subject" value="Wholesale home decor collection for {{company}}">
+  <textarea id="body" rows="7">Hi {{name}},
+
+We manufacture handcrafted home decor (wall art, vases, lighting, textiles) and supply US retailers directly. I'd love to share our catalogue and wholesale pricing with {{company}}.
+
+Would you be open to a quick look?
+
+Regards,
+Your Name</textarea>
+  <button onclick="sendMail()">Send</button></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(url,method='GET',data){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
+  if(!r.ok)throw new Error(await r.text());return r.json();}
+async function load(){const l=await api('/api/leads');
+ $('rows').innerHTML=l.map(x=>`<tr><td><input type="checkbox" class="sel" value="${x.id}" ${x.email?'':'disabled'}></td>
+ <td>${esc(x.company)}</td><td>${esc(x.domain)}</td><td>${esc(x.email)}</td><td>${esc(x.contactName)}</td><td>${esc(x.source)}</td><td>${x.status}</td></tr>`).join('');}
+function toggleAll(c){document.querySelectorAll('.sel:not(:disabled)').forEach(b=>b.checked=c.checked);}
+async function search(){$('msg').textContent='Searching...';
+ try{const r=await api('/api/leads/search','POST',{keyword:$('kw').value,location:$('loc').value});
+  $('msg').textContent=r.length+' new leads found';load();}catch(e){$('msg').textContent='Error: '+e.message;}}
+async function enrich(){$('msg').textContent='Looking up emails...';
+ try{const r=await api('/api/leads/enrich','POST');$('msg').textContent=r.emailsFound+' emails found';load();}
+ catch(e){$('msg').textContent='Error: '+e.message;}}
+async function sendMail(){const ids=[...document.querySelectorAll('.sel:checked')].map(b=>b.value);
+ if(!ids.length)return alert('Select leads with emails first');
+ if(!confirm('Send to '+ids.length+' recipients?'))return;
+ try{const r=await api('/api/email/send','POST',{leadIds:ids,subject:$('subj').value,body:$('body').value});
+  $('msg').textContent=`Sent ${r.sent}, skipped ${r.skipped}, failed ${r.failed}`;load();}catch(e){$('msg').textContent='Error: '+e.message;}}
+load();
+</script></body></html>
